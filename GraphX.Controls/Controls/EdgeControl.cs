@@ -81,13 +81,6 @@ namespace GraphX.Controls
         #region public Clean()
         public override void Clean()
         {
-            _sourceWatcher?.Dispose();
-            _targetWatcher?.Dispose();
-            if (Source != null)
-                Source.PositionChanged -= source_PositionChanged;
-            if (Target != null)
-                Target.PositionChanged -= source_PositionChanged;
-            _oldSource = _oldTarget = null;
             Source = null;
             Target = null;
             Edge = null;
@@ -117,59 +110,28 @@ namespace GraphX.Controls
         }
         #endregion
 
-#if WPF 
+        #region Vertex position tracing
+        private bool _sourceTrace;
+        private bool _targetTrace;
+        private VertexControl _oldSource;
+        private VertexControl _oldTarget;
+
         protected override void OnSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (e.NewValue == null) return;
-            ((EdgeControl)d).ActivateSourceListener();
+            SourceChanged();
         }
 
         protected override void OnTargetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (e.NewValue == null) return;
-            ((EdgeControl)d).ActivateTargetListener();
+            TargetChanged();
         }
 
-        #region Vertex position tracing
-        internal void ActivateSourceListener()
+        private void SourceChanged()
         {
-            if (Source != null && !_posTracersActivatedS)
-            {
-                _sourceTrace = Source.EventOptions.PositionChangeNotification;
-                Source.EventOptions.PositionChangeNotification = true;
-                Source.PositionChanged += source_PositionChanged;
-                Source.SizeChanged += Source_SizeChanged;
-                _sourceWatcher = new PropertyChangeNotifier(this, SourceProperty);
-                _sourceWatcher.ValueChanged += SourceChanged;
-                _posTracersActivatedS = true;
-            }
-        }
+            // Only proceed if not in design mode
+            if (EventOptions == null)
+                return;
 
-        internal void ActivateTargetListener()
-        {
-            if (Target != null && !_posTracersActivatedT)
-            {
-                _targetTrace = Target.EventOptions.PositionChangeNotification;
-                Target.EventOptions.PositionChangeNotification = true;
-                Target.PositionChanged += source_PositionChanged;
-                Target.SizeChanged += Source_SizeChanged;
-                _targetWatcher = new PropertyChangeNotifier(this, TargetProperty);
-                _targetWatcher.ValueChanged += TargetChanged;
-                _posTracersActivatedT = true;
-            }
-        }
-
-        private bool _posTracersActivatedS;
-        private bool _posTracersActivatedT;
-
-        static EdgeControl()
-        {
-            //override the StyleKey
-            DefaultStyleKeyProperty.OverrideMetadata(typeof(EdgeControl), new FrameworkPropertyMetadata(typeof(EdgeControl)));
-        }
-
-        private void SourceChanged(object sender, EventArgs e)
-        {
             if (_oldSource != null)
             {
                 _oldSource.PositionChanged -= source_PositionChanged;
@@ -177,7 +139,7 @@ namespace GraphX.Controls
                 _oldSource.EventOptions.PositionChangeNotification = _sourceTrace;
             }
             _oldSource = Source;
-            if (Source != null)
+            if (Source != null) 
             {
                 _sourceTrace = Source.EventOptions.PositionChangeNotification;
                 Source.EventOptions.PositionChangeNotification = true;
@@ -187,8 +149,12 @@ namespace GraphX.Controls
             IsSelfLooped = IsSelfLoopedInternal;
             UpdateSelfLoopedEdgeData();
         }
-        private void TargetChanged(object sender, EventArgs e)
+        private void TargetChanged()
         {
+            // Only proceed if not in design mode
+            if (EventOptions == null)
+                return;
+
             if (_oldTarget != null)
             {
                 _oldTarget.PositionChanged -= source_PositionChanged;
@@ -217,13 +183,14 @@ namespace GraphX.Controls
         {
             UpdateEdge();
         }
-
-
-        private bool _sourceTrace;
-        private bool _targetTrace;
-        private VertexControl _oldSource;
-        private VertexControl _oldTarget;
         #endregion
+
+#if WPF
+        static EdgeControl()
+        {
+            //override the StyleKey
+            DefaultStyleKeyProperty.OverrideMetadata(typeof(EdgeControl), new FrameworkPropertyMetadata(typeof(EdgeControl)));
+        }
 
         private bool _clickTrack;
         private Point _clickTrackPoint;
@@ -266,44 +233,6 @@ namespace GraphX.Controls
             MouseUp += EdgeControl_MouseUp;
         }
 #elif METRO
-        #region Position tracing
-
-        private void TargetChanged(object sender, DependencyPropertyChangedEventArgs dependencyPropertyChangedEventArgs)
-        {
-            if (_oldTarget != null)
-                _oldTarget.PositionChanged -= source_PositionChanged;
-            _oldTarget = Target;
-            if (Target != null)
-                Target.PositionChanged += source_PositionChanged;
-            IsSelfLooped = IsSelfLoopedInternal;
-            UpdateSelfLoopedEdgeData();
-        }
-
-        private void SourceChanged(object sender, DependencyPropertyChangedEventArgs dependencyPropertyChangedEventArgs)
-        {
-            if (_oldSource != null)
-                _oldSource.PositionChanged -= source_PositionChanged;
-            _oldSource = Source;
-
-            if (Source != null)
-                Source.PositionChanged += source_PositionChanged;
-            IsSelfLooped = IsSelfLoopedInternal;
-            UpdateSelfLoopedEdgeData();
-        }
-
-
-        private void source_PositionChanged(object sender, EventArgs e)
-        {
-            //update edge on any connected vertex position changes
-            UpdateEdge();
-        }
-
-        private readonly IDisposable _sourceWatcher;
-        private readonly IDisposable _targetWatcher;
-        private VertexControl _oldSource;
-        private VertexControl _oldTarget;
-        #endregion
-
         protected internal virtual void UpdateEventhandling(EventType typ)
         {
             switch (typ)
@@ -358,14 +287,9 @@ namespace GraphX.Controls
                 foreach (var item in Enum.GetValues(typeof (EventType)).Cast<EventType>())
                     UpdateEventhandling(item);
 
-#if WPF
-                ActivateSourceListener();
-                ActivateTargetListener();
-#elif METRO
-                SourceChanged(null, null);
-                _sourceWatcher = this.WatchProperty("Source", SourceChanged);
-                _targetWatcher = this.WatchProperty("Target", TargetChanged);
-#endif
+                // Trigger initial state
+                SourceChanged();
+                TargetChanged();
             }
 
             IsSelfLooped = IsSelfLoopedInternal;

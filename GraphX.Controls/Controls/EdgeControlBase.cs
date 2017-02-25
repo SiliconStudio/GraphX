@@ -236,10 +236,6 @@ namespace GraphX.Controls
         /// </summary>
         public bool UpdateLabelPosition { get { return _updateLabelPosition; } set { _updateLabelPosition = true; } }
 
-#if WPF
-        protected PropertyChangeNotifier _sourceWatcher;
-        protected PropertyChangeNotifier _targetWatcher;
-#endif
         /// <summary>
         /// Gets or set if hidden edges should be updated when connected vertices positions are changed. Default value is True.
         /// </summary>
