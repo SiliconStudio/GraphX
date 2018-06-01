@@ -49,10 +49,11 @@ namespace ShowcaseApp.WPF.Pages
             gg_Area.RelayoutFinished += gg_Area_RelayoutFinished;
             gg_Area.GenerateGraphFinished += gg_Area_GenerateGraphFinished;
             gg_Area.VertexLabelFactory = new DefaultVertexlabelFactory();
+            gg_Area.SetEdgesDrag(true);
 
             ggLogic.DefaultEdgeRoutingAlgorithm = EdgeRoutingAlgorithmTypeEnum.SimpleER;
             ggLogic.EdgeCurvingEnabled = true;                  
-            gg_Area.ShowAllEdgesArrows(true);
+            gg_Area.ShowAllEdgesArrows();
 
             ZoomControl.SetViewFinderVisibility(gg_zoomctrl, Visibility.Visible);
 

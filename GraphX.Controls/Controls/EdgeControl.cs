@@ -12,6 +12,7 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 #endif
 using GraphX.Controls.Models;
+using GraphX.PCL.Common;
 using GraphX.PCL.Common.Enums;
 using GraphX.PCL.Common.Interfaces;
 
@@ -57,26 +58,6 @@ namespace GraphX.Controls
 
         #endregion
 
-        public event EdgeLabelEventHandler LabelMouseDown;
-        protected void OnLabelMouseDown(MouseButtonEventArgs mArgs, ModifierKeys keys)
-        {
-            LabelMouseDown?.Invoke(this, new EdgeLabelSelectedEventArgs(EdgeLabelControl, this, mArgs, keys));
-        }
-
-        protected override void OnEdgeLabelUpdated()
-        {
-            var ctrl = EdgeLabelControl as Control;
-            if (ctrl == null) return;
-#if WPF
-            MouseButtonEventHandler func = (sender, args) => OnLabelMouseDown(args, Keyboard.Modifiers);
-            ctrl.MouseDown -= func;
-            ctrl.MouseDown += func;
-#elif METRO
-            PointerEventHandler func = (sender, args) => OnLabelMouseDown(args, null);
-            ctrl.PointerPressed -= func;
-            ctrl.PointerPressed += func;
-#endif
-        }
 
         #region public Clean()
         public override void Clean()
@@ -90,11 +71,8 @@ namespace GraphX.Controls
             Linegeometry = null;
             LinePathObject = null;
             SelfLoopIndicator = null;
-            if (EdgeLabelControl != null)
-            {
-                EdgeLabelControl.Dispose();
-                EdgeLabelControl = null;
-            }
+            EdgeLabelControls.ForEach(l=> l.Dispose());
+            EdgeLabelControls.Clear();
 
             if (EdgePointerForSource != null)
             {
@@ -136,13 +114,17 @@ namespace GraphX.Controls
             {
                 _oldSource.PositionChanged -= source_PositionChanged;
                 _oldSource.SizeChanged -= Source_SizeChanged;
+#if WPF
                 _oldSource.EventOptions.PositionChangeNotification = _sourceTrace;
+#endif
             }
             _oldSource = Source;
             if (Source != null) 
             {
+#if WPF
                 _sourceTrace = Source.EventOptions.PositionChangeNotification;
                 Source.EventOptions.PositionChangeNotification = true;
+#endif
                 Source.PositionChanged += source_PositionChanged;
                 Source.SizeChanged += Source_SizeChanged;
             }
@@ -159,13 +141,17 @@ namespace GraphX.Controls
             {
                 _oldTarget.PositionChanged -= source_PositionChanged;
                 _oldTarget.SizeChanged -= Source_SizeChanged;
+#if WPF
                 _oldTarget.EventOptions.PositionChangeNotification = _targetTrace;
+#endif
             }
             _oldTarget = Target;
             if (Target != null)
             {
+#if WPF
                 _targetTrace = Target.EventOptions.PositionChangeNotification;
                 Target.EventOptions.PositionChangeNotification = true;
+#endif
                 Target.PositionChanged += source_PositionChanged;
                 Target.SizeChanged += Source_SizeChanged;
             }
@@ -267,13 +253,12 @@ namespace GraphX.Controls
         {
         }
 
-        public EdgeControl(VertexControl source, VertexControl target, object edge, bool showLabels = false, bool showArrows = true)
+        public EdgeControl(VertexControl source, VertexControl target, object edge, bool showArrows = true)
         {
             DataContext = edge;
             Source = source; Target = target;
             Edge = edge; DataContext = edge;
             this.SetCurrentValue(ShowArrowsProperty, showArrows);
-            this.SetCurrentValue(ShowLabelProperty, showLabels);
             IsHiddenEdgesUpdated = true;
 
 #if METRO

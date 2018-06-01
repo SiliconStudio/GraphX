@@ -4,14 +4,18 @@ using System.Linq;
 #if WPF
 using System.Windows;
 using System.Windows.Controls;
+using USize = System.Windows.Size;
+using Point = System.Windows.Point;
 #elif METRO
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.Foundation;
+using USize = Windows.Foundation.Size;
 #endif
 using GraphX.Controls.Models;
 using GraphX.PCL.Common;
 using GraphX.PCL.Common.Enums;
+using Rect = GraphX.Measure.Rect;
 
 namespace GraphX.Controls
 {
@@ -197,7 +201,9 @@ namespace GraphX.Controls
         /// <param name="round"></param>
         public Point GetPosition(bool final = false, bool round = false)
         {
-            return round ? new Point(final ? (int)GraphAreaBase.GetFinalX(this) : (int)GraphAreaBase.GetX(this), final ? (int)GraphAreaBase.GetFinalY(this) : (int)GraphAreaBase.GetY(this)) : new Point(final ? GraphAreaBase.GetFinalX(this) : GraphAreaBase.GetX(this), final ? GraphAreaBase.GetFinalY(this) : GraphAreaBase.GetY(this));
+            return round ?
+                new Point(final ? (int)GraphAreaBase.GetFinalX(this) : (int)GraphAreaBase.GetX(this), final ? (int)GraphAreaBase.GetFinalY(this) : (int)GraphAreaBase.GetY(this)) :
+                new Point(final ? GraphAreaBase.GetFinalX(this) : GraphAreaBase.GetX(this), final ? GraphAreaBase.GetFinalY(this) : GraphAreaBase.GetY(this));
         }
         /// <summary>
         /// Get control position on the GraphArea panel in attached coords X and Y (GraphX type version)
@@ -230,6 +236,17 @@ namespace GraphX.Controls
             var result = VertexConnectionPointsList.FirstOrDefault(a => a.Id == id);
             result?.Update();
             return result;
+        }
+
+        public IVertexConnectionPoint GetConnectionPointAt(Point position)
+        {
+            Measure(new USize(double.PositiveInfinity, double.PositiveInfinity));
+
+            return VertexConnectionPointsList.FirstOrDefault(a =>
+            {
+                var rect = new Rect(a.RectangularSize.X, a.RectangularSize.Y, a.RectangularSize.Width, a.RectangularSize.Height);
+                return rect.Contains(position.ToGraphX());
+            });
         }
 
         /// <summary>

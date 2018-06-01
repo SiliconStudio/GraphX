@@ -66,8 +66,8 @@ namespace GraphX.Controls
             DependencyProperty.Register(nameof(LogicCore), typeof(IGXLogicCore<TVertex, TEdge, TGraph>), typeof(GraphArea<TVertex, TEdge, TGraph>), new PropertyMetadata(null, logic_core_changed));
 
         private static
-#if METRO 
-            async 
+#if METRO
+            async
 #endif
  void logic_core_changed(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -164,12 +164,13 @@ namespace GraphX.Controls
         internal override double EdgeCurvingTolerance => LogicCore?.EdgeCurvingTolerance ?? 0;
 
         /// <summary>
-        /// Add custom control for 
+        /// Add custom control for
         /// </summary>
         /// <param name="control"></param>
         public virtual void AddCustomChildControl(UIElement control)
         {
-            Children.Add(control);
+            if(!Children.Contains(control))
+                Children.Add(control);
             SetX(control, 0);
             SetY(control, 0);
         }
@@ -242,7 +243,7 @@ namespace GraphX.Controls
         {
             EnableVisualPropsRecovery = true;
             EnableVisualPropsApply = true;
-            //EdgeLabelFactory = new DefaultLabelFactory<AttachableEdgeLabelControl, IEdgeLabelControl>();
+            EdgeLabelFactory = new DefaultEdgelabelFactory();
             //VertexLabelFactory = new DefaultLabelFactory<AttachableVertexLabelControl, IVertexLabelControl>();
 
             #region Designer Data
@@ -302,9 +303,10 @@ namespace GraphX.Controls
         /// Returns first vertex that is found under specified coordinates
         /// </summary>
         /// <param name="position">GraphArea coordinate space position</param>
-        public virtual VertexControl GetVertexControlAt(Point position)
+        public override VertexControl GetVertexControlAt(Point position)
         {
             Measure(new USize(double.PositiveInfinity, double.PositiveInfinity));
+
             return VertexList.Values.FirstOrDefault(a =>
             {
                 var pos = a.GetPosition();
@@ -414,7 +416,7 @@ namespace GraphX.Controls
         /// <param name="removeEdgeFromDataGraph">Remove edge from data graph if possible. Default value is False.</param>
         public void RemoveEdge(TEdge edgeData, bool removeEdgeFromDataGraph = false)
         {
-            RemoveEdgeInternal(edgeData, true);
+            RemoveEdgeInternal(edgeData, true, removeEdgeFromDataGraph);
             var hasStorage = LogicCore?.AlgorithmStorage != null && (edgeData.SkipProcessing != ProcessingOptionEnum.Exclude || removeEdgeFromDataGraph);
             if (hasStorage) LogicCore.AlgorithmStorage.RemoveSingleEdge(edgeData);
         }
@@ -433,11 +435,8 @@ namespace GraphX.Controls
 
         private void RemoveEdgeInternal(EdgeControlBase ctrl, bool removeEdgeFromDataGraph = false)
         {
-            if (ctrl.EdgeLabelControl != null)
-            {
-                Children.Remove((UIElement)ctrl.EdgeLabelControl);
-                ctrl.DetachLabel();
-            }
+            ctrl.DetachLabels();
+
             Children.Remove(ctrl);
             if (removeEdgeFromDataGraph && LogicCore?.Graph != null && LogicCore.Graph.ContainsEdge(ctrl.Edge as TEdge))
                 LogicCore.Graph.RemoveEdge(ctrl.Edge as TEdge);
@@ -658,14 +657,18 @@ namespace GraphX.Controls
 
         protected virtual void GenerateVertexLabel(VertexControl vertexControl)
         {
-            var label = VertexLabelFactory.CreateLabel(vertexControl);
-            if (!(label is IVertexLabelControl))
+            var labels = VertexLabelFactory.CreateLabel(vertexControl);
+            if (labels == null) return;
+            if (labels.Any(l=> !(l is IVertexLabelControl)))
                 throw new GX_InvalidDataException("Generated vertex label should implement IVertexLabelControl interface");
-            if (_svVertexLabelShow == false || vertexControl.Visibility != Visibility.Visible)
-                label.Visibility = Visibility.Collapsed;
-            AddCustomChildControl(label);
-            label.Measure(new USize(double.MaxValue, double.MaxValue));
-            ((IVertexLabelControl)label).UpdatePosition();
+            labels.ForEach(l =>
+            {
+                if (_svVertexLabelShow == false || vertexControl.Visibility != Visibility.Visible)
+                    l.Visibility = Visibility.Collapsed;
+                AddCustomChildControl(l);
+                l.Measure(new USize(double.MaxValue, double.MaxValue));
+                ((IVertexLabelControl)l).UpdatePosition();
+            });
         }
 
         protected virtual void GenerateEdgeLabels()
@@ -680,14 +683,17 @@ namespace GraphX.Controls
 
         protected virtual void GenerateEdgeLabel(EdgeControl edgeControl)
         {
-            var label = EdgeLabelFactory.CreateLabel(edgeControl);
-            if (!(label is IEdgeLabelControl))
+            var labels = EdgeLabelFactory.CreateLabel(edgeControl);
+            if (labels == null) return;
+            if (labels.Any(a=> !(a is IEdgeLabelControl)))
                 throw new GX_InvalidDataException("Generated edge label should implement IEdgeLabelControl interface");
-            if (_svShowEdgeLabels == false || edgeControl.Visibility != Visibility.Visible)
-                label.Visibility = Visibility.Collapsed;
-            AddCustomChildControl(label);
-            label.Measure(new USize(double.MaxValue, double.MaxValue));
-            ((IEdgeLabelControl)label).UpdatePosition();
+            
+            labels.ForEach(l =>
+            {
+                AddCustomChildControl(l);
+                l.Measure(new USize(double.MaxValue, double.MaxValue));
+                ((IEdgeLabelControl)l).UpdatePosition();
+            });
         }
 
         #endregion
@@ -698,7 +704,7 @@ namespace GraphX.Controls
         /// </summary>
         public Dictionary<TVertex, Size> GetVertexSizes()
         {
-            //measure if needed and get all vertex sizes            
+            //measure if needed and get all vertex sizes
             Measure(new USize(double.PositiveInfinity, double.PositiveInfinity));
             var vertexSizes = new Dictionary<TVertex, Size>(_vertexlist.Count(a => ((IGraphXVertex)a.Value.Vertex).SkipProcessing != ProcessingOptionEnum.Exclude));
             //go through the vertex presenters and get the actual layoutpositions
@@ -814,7 +820,7 @@ namespace GraphX.Controls
         private CancellationTokenSource _layoutCancellationSource;
 
         /// <summary>
-        /// Gets or sets if visual graph should be updated if graph is filtered. 
+        /// Gets or sets if visual graph should be updated if graph is filtered.
         /// Remove all visuals with no keys in data graph and add all visuals that has keys in data graph.
         /// Default value is True.
         /// </summary>
@@ -896,7 +902,7 @@ namespace GraphX.Controls
             if (!localLogicCore.GenerateAlgorithmStorage(vertexSizes, vertexPositions))
                 return;
 
-            //clear routing info                
+            //clear routing info
             localLogicCore.Graph.Edges.ForEach(a => a.RoutingPoints = null);
 
             var resultCoords = localLogicCore.Compute(cancellationToken);
@@ -971,7 +977,7 @@ namespace GraphX.Controls
         /// </summary>
         /// <param name="generateAllEdges">Generate all available edges for graph</param>
 #if WPF
-        public virtual void RelayoutGraph(bool generateAllEdges = false)
+        public override void RelayoutGraph(bool generateAllEdges = false)
         {
             LogicCore.PushFilters();
             _relayoutGraphMain(generateAllEdges);
@@ -1025,7 +1031,7 @@ namespace GraphX.Controls
         }
 
 #elif METRO
-        public Task RelayoutGraphAsync(bool generateAllEdges = false)
+        public override Task RelayoutGraphAsync(bool generateAllEdges = false)
         {
             return RelayoutGraphAsync(CancellationToken.None, generateAllEdges);
         }
@@ -1192,7 +1198,7 @@ namespace GraphX.Controls
             if (LogicCore.Graph == null)
                 throw new InvalidDataException("GraphArea.GenerateGraph() -> LogicCore.Graph property is null while trying to generate graph!");
 
-            LogicCore.PushFilters();   
+            LogicCore.PushFilters();
             if (AutoAssignMissingDataId)
                 AutoresolveIds(false, graph);
             if (!LogicCore.IsCustomLayout)
@@ -1326,10 +1332,11 @@ namespace GraphX.Controls
 
         protected void ReapplySingleEdgeVisualProperties(EdgeControl item)
         {
+            if (this._edgesDragEnabled != null) DragBehaviour.SetIsDragEnabled(item, this._edgesDragEnabled.Value);
             if (_svEdgeDashStyle != null) item.DashStyle = _svEdgeDashStyle.Value;
             if (_svShowEdgeArrows != null) item.SetCurrentValue(EdgeControlBase.ShowArrowsProperty, _svShowEdgeArrows.Value);
-            if (_svShowEdgeLabels != null) item.ShowLabel = _svShowEdgeLabels.Value;
-            if (_svAlignEdgeLabels != null) item.AlignLabelsToEdges = _svAlignEdgeLabels.Value;
+            //if (_svShowEdgeLabels != null) item.ShowLabel = _svShowEdgeLabels.Value;
+            //if (_svAlignEdgeLabels != null) item.AlignLabelsToEdges = _svAlignEdgeLabels.Value;
             if (_svUpdateLabelPosition != null) item.UpdateLabelPosition = _svUpdateLabelPosition.Value;
             if (_svEdgeHlEnabled != null) HighlightBehaviour.SetIsHighlightEnabled(item, _svEdgeHlEnabled.Value);
             if (_svEdgeHlObjectType != null) HighlightBehaviour.SetHighlightControl(item, _svEdgeHlObjectType.Value);
@@ -1369,16 +1376,16 @@ namespace GraphX.Controls
                 item.SetCurrentValue(EdgeControlBase.ShowArrowsProperty, isEnabled);
         }
 
-        private bool? _svShowEdgeLabels;
+        //private bool? _svShowEdgeLabels;
         /// <summary>
         /// Show or hide all edges labels
         /// </summary>
         /// <param name="isEnabled">Boolean value</param>
         public void ShowAllEdgesLabels(bool isEnabled = true)
         {
-            _svShowEdgeLabels = isEnabled;
+            //_svShowEdgeLabels = isEnabled;
             foreach (var item in _edgeslist.Values)
-                item.SetCurrentValue(EdgeControlBase.ShowLabelProperty, isEnabled);
+                item.EdgeLabelControls.Cast<FrameworkElement>().ForEach(l=> l.SetCurrentValue(EdgeLabelControl.ShowLabelProperty, isEnabled));
 #if WPF
             InvalidateVisual();
 #endif
@@ -1399,18 +1406,16 @@ namespace GraphX.Controls
 #endif
         }
 
-        private bool? _svAlignEdgeLabels;
+        //private bool? _svAlignEdgeLabels;
         /// <summary>
         /// Aligns all labels with edges or displays them horizontaly
         /// </summary>
         /// <param name="isEnabled">Boolean value</param>
         public void AlignAllEdgesLabels(bool isEnabled = true)
         {
-            _svAlignEdgeLabels = isEnabled;
+            //_svAlignEdgeLabels = isEnabled;
             foreach (var item in _edgeslist.Values)
-            {
-                item.AlignLabelsToEdges = isEnabled;
-            }
+                item.EdgeLabelControls.ForEach(l=> l.AlignToEdge = isEnabled);
 #if WPF
             InvalidateVisual();
 #endif
@@ -1432,6 +1437,21 @@ namespace GraphX.Controls
             {
                 DragBehaviour.SetIsDragEnabled(item.Value, isEnabled);
                 DragBehaviour.SetUpdateEdgesOnMove(item.Value, updateEdgesOnMove);
+            }
+        }
+
+        private bool? _edgesDragEnabled;
+        /// <summary>
+        /// Sets drag mode for all edges
+        /// </summary>
+        /// <param name="isEnabled">Is drag mode enabled</param>
+        public void SetEdgesDrag(bool isEnabled)
+        {
+            _edgesDragEnabled = isEnabled;
+
+            foreach (var item in EdgesList)
+            {
+                DragBehaviour.SetIsDragEnabled(item.Value, isEnabled);
             }
         }
 
@@ -1515,7 +1535,7 @@ namespace GraphX.Controls
         {
             if (LogicCore == null)
                 throw new GX_InvalidDataException("LogicCore -> Not initialized!");
-            RemoveAllEdges(); 
+            RemoveAllEdges();
 
             AutoresolveEdgeIds();
 
@@ -1524,16 +1544,18 @@ namespace GraphX.Controls
                 if (item.Source == null || item.Target == null) continue;
                 if (!_vertexlist.ContainsKey(item.Source) || !_vertexlist.ContainsKey(item.Target)) continue;
                 var edgectrl = ControlFactory.CreateEdgeControl(_vertexlist[item.Source], _vertexlist[item.Target],
-                                                                    item, _svShowEdgeLabels ?? false, _svShowEdgeArrows ?? true, defaultVisibility);
+                                                                    item, _svShowEdgeArrows ?? true, defaultVisibility);
                 InternalInsertEdge(item, edgectrl);
                 //setup path
-                if (_svShowEdgeLabels == true)
-                    edgectrl.SetCurrentValue(EdgeControlBase.ShowLabelProperty, true);
-                edgectrl.PrepareEdgePath();
             }
 
             if (LogicCore.EnableParallelEdges)
                 UpdateParallelEdgesData();
+
+            foreach (var item in _edgeslist)
+            {
+                item.Value.PrepareEdgePath();
+            }
 
             GenerateEdgeLabels();
         }
@@ -1557,77 +1579,51 @@ namespace GraphX.Controls
         public virtual void UpdateParallelEdgesData(Dictionary<TEdge, EdgeControl> edgeList = null)
         {
             edgeList = edgeList ?? _edgeslist;
-            var usedIds = edgeList.Count > 20 ? new HashSet<long>() as ICollection<long> : new List<long>();
 
             //clear IsParallel flag
             edgeList.Values.ForEach(a => a.IsParallel = false);
 
-            foreach (var item in edgeList)
+            // Group edges together that share the same source and target. Edges that have both a source and target connection point defined are excluded. Self
+            // looped edges are excluded. Edges marked with CanBeParallel == false are excluded. Edges with a connection point are pushed to the end of the group
+            // and will be marked as parallel, but their offsets end up overridden during rendering.
+            var edgeGroups =
+                (from edge in edgeList
+                 where edge.Value.CanBeParallel && !edge.Key.IsSelfLoop && (!edge.Key.SourceConnectionPointId.HasValue || !edge.Key.TargetConnectionPointId.HasValue)
+                 group edge by new Tuple<long, long>(Math.Min(edge.Key.Source.ID, edge.Key.Target.ID), Math.Max(edge.Key.Source.ID, edge.Key.Target.ID)) into edgeGroup
+                 select edgeGroup.OrderBy(e => e.Key.SourceConnectionPointId.HasValue || e.Key.TargetConnectionPointId.HasValue ? 1 : 0).ToList())
+                .ToList();
+
+            foreach (var list in edgeGroups)
             {
-                if (usedIds.Contains(item.Key.ID) || !item.Value.CanBeParallel) continue;
-                var list = new List<EdgeControl> { item.Value };
-                //that list will contain checks for edges that goes form target to source
-                var cList = new List<bool> { false };
-                foreach (var edge in edgeList)
+                var first = list[0];
+
+                // Alternate sides with each step
+                int viceversa = 1;
+                // Check if total number of edges without connection points is even or not
+                bool even = (list.TakeWhile(e => !e.Key.SourceConnectionPointId.HasValue && !e.Key.TargetConnectionPointId.HasValue).Count() % 2) == 0;
+                // For even numbers of edges, initial offset is a half step from the center
+                int initialOffset = even ? LogicCore.ParallelEdgeDistance / 2 : 0;
+
+                for (int i = 0; i < list.Count; i++)
                 {
-                    //skip the same edge
-                    if (item.Key.ID == edge.Key.ID) continue;
-                    //add source to target edge
-                    if (edge.Value.CanBeParallel && ((item.Key.Source.ID == edge.Key.Source.ID && item.Key.Target.ID == edge.Key.Target.ID)))
+                    var kvp = list[i];
+                    kvp.Value.IsParallel = true;
+
+                    var offset = viceversa * (initialOffset + LogicCore.ParallelEdgeDistance * ((i + (even ? 0 : 1)) / 2));
+                    //if source to target edge
+                    if (kvp.Key.Source == first.Key.Source)
                     {
-                        list.Add(edge.Value);
-                        cList.Add(false);
+                        kvp.Value.ParallelEdgeOffset = offset;
                     }
-                    //add target to source edge and remember the check
-                    if (item.Key.Source.ID == edge.Key.Target.ID && item.Key.Target.ID == edge.Key.Source.ID)
+                    else //if target to source edge - just switch offsets
                     {
-                        cList.Add(true);
-                        list.Add(edge.Value);
+                        kvp.Value.ParallelEdgeOffset = -offset;
                     }
-                    //else cList.Add(false);
+                    //change trigger to opposite
+                    viceversa = -viceversa;
                 }
-
-                //do stuff
-                if (list.Count > 1)
-                {
-                    //trigger to show in which side to step distance
-                    bool viceversa = false;
-                    //check if total number of edges is even or not
-                    bool even = (list.Count % 2) == 0;
-                    //get the resulting step distance for the case
-                    int distance = even ? (int)(LogicCore.ParallelEdgeDistance * .5) : LogicCore.ParallelEdgeDistance;
-
-                    //leave first edge intact if we have not even edges count
-                    for (int i = even ? 0 : 1; i < list.Count; i++)
-                    {
-                        //if source to target edge
-                        if (!cList[i])
-                        {
-                            list[i].ParallelEdgeOffset = (viceversa ? -distance : distance) * (1 + ((even ? i : i - 1) / 2));
-                            //list[i].TargetOffset = -list[i].ParallelEdgeOffset;
-                        }
-                        else //if target to source edge - just switch offsets
-                        {
-                            list[i].ParallelEdgeOffset = -((viceversa ? -distance : distance) * (1 + ((even ? i : i - 1) / 2)));
-                            //list[i].ParallelEdgeOffset = -list[i].TargetOffset;
-                        }
-                        //change trigger to opposite
-                        viceversa = !viceversa;
-                        list[i].IsParallel = true;
-                    }
-                }
-
-                //remember used edges IDs
-                list.ForEach(a =>
-                {
-                    var edge = a.Edge as TEdge;
-                    if (edge != null) usedIds.Add(edge.ID);
-                });
-                list.Clear();
             }
         }
-
-
 
         #endregion
 
@@ -1664,7 +1660,7 @@ namespace GraphX.Controls
                 foreach (var item in inlist)
                 {
                     if (gotSelfLoop) continue;
-                    var ctrl = ControlFactory.CreateEdgeControl(_vertexlist[item.Source], vc, item, _svShowEdgeLabels ?? false, _svShowEdgeArrows ?? true,
+                    var ctrl = ControlFactory.CreateEdgeControl(_vertexlist[item.Source], vc, item, _svShowEdgeArrows ?? true,
                                                                      defaultVisibility);
                     InsertEdge(item, ctrl);
                     ctrl.PrepareEdgePath();
@@ -1674,7 +1670,7 @@ namespace GraphX.Controls
                 foreach (var item in outlist)
                 {
                     if (gotSelfLoop) continue;
-                    var ctrl = ControlFactory.CreateEdgeControl(vc, _vertexlist[item.Target], item, _svShowEdgeLabels ?? false, _svShowEdgeArrows ?? true,
+                    var ctrl = ControlFactory.CreateEdgeControl(vc, _vertexlist[item.Target], item, _svShowEdgeArrows ?? true,
                                                  defaultVisibility);
                     InsertEdge(item, ctrl);
                     ctrl.PrepareEdgePath();
@@ -1742,9 +1738,17 @@ namespace GraphX.Controls
             }
             var ec = ctrl as EdgeControl;
             if (ec == null) return list;
+            
             var edge = (TEdge)ec.Edge;
-            if (_vertexlist.ContainsKey(edge.Target)) list.Add(_vertexlist[edge.Target]);
-            if (_vertexlist.ContainsKey(edge.Source)) list.Add(_vertexlist[edge.Source]);
+            if (edge.Target != null && _vertexlist.ContainsKey(edge.Target))
+            {
+                list.Add(_vertexlist[edge.Target]);
+            }
+            if (edge.Source != null && _vertexlist.ContainsKey(edge.Source))
+            {
+                list.Add(_vertexlist[edge.Source]);
+            }
+            
             return list;
         }
 
@@ -1785,7 +1789,7 @@ namespace GraphX.Controls
         }
 
         /// <summary>
-        /// Get controls related to specified control 
+        /// Get controls related to specified control
         /// </summary>
         /// <param name="ctrl">Original control</param>
         /// <param name="resultType">Type of resulting related controls</param>
@@ -1871,7 +1875,7 @@ namespace GraphX.Controls
             foreach (var item in EdgesList)
             {
                 // item.Key.RoutingPoints = new Point[] { new Point(0, 123), new Point(12, 12), new Point(10, 234.5) };
-                dlist.Add(new GraphSerializationData { Position = new Measure.Point(), Data = item.Key, IsVisible = item.Value.Visibility == Visibility.Visible, HasLabel = item.Value.EdgeLabelControl != null });
+                dlist.Add(new GraphSerializationData { Position = new Measure.Point(), Data = item.Key, IsVisible = item.Value.Visibility == Visibility.Visible, HasLabel = item.Value.EdgeLabelControls.Count > 0 });
                 if (item.Key.ID == -1) throw new GX_InvalidDataException("ExtractSerializationData() -> All edge datas must have positive unique ID!");
             }
             return dlist;
@@ -1921,7 +1925,7 @@ namespace GraphX.Controls
 
                 if (datasource == null || datatarget == null)
                     throw new GX_SerializationException("DeserializeFromFile() -> Serialization logic is broken! Vertex not found. All vertices must be processed before edges!");
-                var ecc = ControlFactory.CreateEdgeControl(_vertexlist[datasource], _vertexlist[datatarget], edgedata, false, true, item.IsVisible ? Visibility.Visible : Visibility.Collapsed);
+                var ecc = ControlFactory.CreateEdgeControl(_vertexlist[datasource], _vertexlist[datatarget], edgedata, true, item.IsVisible ? Visibility.Visible : Visibility.Collapsed);
                 InsertEdge(edgedata, ecc);
                 LogicCore.Graph.AddEdge(edgedata);
                 if (item.HasLabel)
@@ -1966,7 +1970,7 @@ namespace GraphX.Controls
         /// <summary>
         /// Export current graph layout into the JPEG image file. layout will be saved in full size.
         /// </summary>
-        /// <param name="quality">Optional image quality parameter</param>   
+        /// <param name="quality">Optional image quality parameter</param>
         public virtual void ExportAsJpeg(int quality = 100)
         {
             ExportAsImageDialog(ImageType.JPEG, true, PrintHelper.DEFAULT_DPI, quality);
@@ -1978,7 +1982,7 @@ namespace GraphX.Controls
         /// <param name="itype">Image format</param>
         /// <param name="dpi">Optional image DPI parameter</param>
         /// <param name="useZoomControlSurface">Use zoom control parent surface to render bitmap (only visible zoom content will be exported)</param>
-        /// <param name="quality">Optional image quality parameter (for JPEG)</param>   
+        /// <param name="quality">Optional image quality parameter (for JPEG)</param>
         public virtual void ExportAsImageDialog(ImageType itype, bool useZoomControlSurface = false, double dpi = PrintHelper.DEFAULT_DPI, int quality = 100)
         {
 #if WPF
@@ -2030,7 +2034,7 @@ namespace GraphX.Controls
         }
 #endif
         /// <summary>
-        /// Sets GraphArea into printing mode when its size will be recalculated on each measuer and child controls will be arranged accordingly. 
+        /// Sets GraphArea into printing mode when its size will be recalculated on each measuer and child controls will be arranged accordingly.
         /// Use with caution. Can spoil normal work while active but is essential to set before printing or grabbing an image.
         /// </summary>
         /// <param name="value">True or False</param>
@@ -2168,7 +2172,7 @@ namespace GraphX.Controls
 
         protected virtual void CreateNewStateStorage()
         {
-            _stateStorage = new StateStorage<TVertex, TEdge, TGraph>(this);            
+            _stateStorage = new StateStorage<TVertex, TEdge, TGraph>(this);
         }
 
         #endregion
@@ -2219,9 +2223,19 @@ namespace GraphX.Controls
                 UIElement element = null;
                 if (vResult?.VertexLabelControl != null)
                     element = (UIElement)vResult.VertexLabelControl;
-                if (eResult?.EdgeLabelControl != null)
-                    element = (UIElement)eResult.EdgeLabelControl;
-                if (element != null && Children.Contains(element))
+                if (eResult?.EdgeLabelControls.Count > 0)
+                {
+                    eResult.EdgeLabelControls.ForEach(l =>
+                    {
+                        if (Children.Contains((UIElement)l))
+                        {
+                            Children.Remove((UIElement)l);
+                            if (toFront) Children.Add((UIElement)l);
+                            else Children.Insert(0, (UIElement)l);
+                        }
+                    });
+                }
+                else if (element != null && Children.Contains(element))
                 {
                     Children.Remove(element);
                     if (toFront) Children.Add(element);
