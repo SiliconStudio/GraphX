@@ -1,4 +1,4 @@
-﻿
+
 
 using System.ComponentModel;
 using GraphX.Controls.Models;
@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using Windows.Foundation;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Data;
+using BindableAttribute = Windows.UI.Xaml.Data.BindableAttribute;
 using DefaultEventArgs = System.Object;
 #endif
 using GraphX.PCL.Common.Exceptions;

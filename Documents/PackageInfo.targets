@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>Xenko.$(AssemblyName)</PackageId>
+    <PackageVersion>2.4.0</PackageVersion>
+    <Copyright>Copyright www.panthernet.ru © 2018</Copyright>
+    <Authors>panthernet</Authors>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/xenko3d/GraphX.git</RepositoryUrl>
+  </PropertyGroup>
+</Project>

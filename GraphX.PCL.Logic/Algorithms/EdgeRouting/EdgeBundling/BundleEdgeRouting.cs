@@ -6,6 +6,7 @@ using GraphX.Measure;
 using GraphX.PCL.Common.Interfaces;
 using GraphX.PCL.Common.Models.Semaphore;
 using QuickGraph;
+using Semaphore = GraphX.PCL.Common.Models.Semaphore.Semaphore;
 
 /* Code here is partially used from NodeXL (https://nodexl.codeplex.com/)
  * 
