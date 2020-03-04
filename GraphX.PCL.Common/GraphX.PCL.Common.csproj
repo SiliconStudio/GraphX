@@ -69,6 +69,6 @@
     <Compile Include="Measure\Vector.cs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Xenko.QuickGraph" Version="3.7.0" />
+    <PackageReference Include="Stride.QuickGraph" Version="3.7.0" />
   </ItemGroup>
 </Project>
